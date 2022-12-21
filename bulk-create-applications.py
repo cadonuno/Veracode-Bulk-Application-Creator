@@ -55,8 +55,8 @@ non_custom_field_headers={"Application Name",
 
 def print_help():
     """Prints command line options and exits"""
-    print("""bulk-create-applications.py -f <excel_file_with_workspaces_and_teams> -r <header_row> [-d]"
-        Reads all lines in <excel_file_with_workspaces_and_teams>, for each line, it will create a new application profile
+    print("""bulk-create-applications.py -f <excel_file_with_application_definitions> -r <header_row> [-d]"
+        Reads all lines in <excel_file_with_application_definitions>, for each line, it will create a new application profile
         <header_row> defines which row contains your table headers, which will be read to determine where each field goes.
 """)
     sys.exit()
