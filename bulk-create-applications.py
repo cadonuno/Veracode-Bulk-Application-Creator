@@ -6,6 +6,7 @@ import urllib.parse
 from veracode_api_signing.plugin_requests import RequestsAuthPluginVeracodeHMAC
 import openpyxl
 import time
+import xml.etree.ElementTree as ET  # for parsing XML
 
 from veracode_api_signing.credentials import get_credentials
 
@@ -19,9 +20,14 @@ class NoExactMatchFoundException(Exception):
 
 
 
-headers = {
-    "User-Agent": "Adding teams to workspaces - python script",
+json_headers = {
+    "User-Agent": "Bulk application creation - python script",
     "Content-Type": "application/json"
+}
+
+xml_headers = {
+    "User-Agent": "Bulk application creation - python script",
+    "Content-Type": "application/xml"
 }
 
 failed_attempts = 0
@@ -32,8 +38,12 @@ last_column = 0
 non_custom_field_headers={"Application Name",
                             "Business Criticality",
                             "Policy",
-                            "Submitting party",
-                            "Vendor",
+                            "Submitting party", #not used, here just so it gets ignored
+                            "Vendor", #not used, here just so it gets ignored
+                            "Origin",
+                            "Industry",
+                            "Application Purpose",
+                            "Deployment Method",
                             "Description",
                             "Tags",
                             "Business Unit",
@@ -62,7 +72,12 @@ def find_exact_match(list, to_find, field_name):
     raise NoExactMatchFoundException(f"Unable to find a member of list with {field_name} equal to {to_find}")
 
 def get_field_value(excel_headers, excel_sheet, row, field_header):
-    return excel_sheet.cell(row = row, column = excel_headers[field_header.strip()]).value
+    field_to_get = field_header.strip()
+    if field_to_get in excel_headers:
+        field_value = excel_sheet.cell(row = row, column = excel_headers[field_to_get]).value
+        if field_value:
+            return field_value
+    return ""
 
 def get_business_owners(excel_headers, excel_sheet, row):
     name=get_field_value(excel_headers, excel_sheet, row, "Business Owner")
@@ -85,7 +100,7 @@ def get_item_from_api_call(api_base, api_to_call, item_to_find, list_name, field
     if verbose:
         print(f"Calling: {path}")
 
-    response = requests.get(path, auth=RequestsAuthPluginVeracodeHMAC(), headers=headers)
+    response = requests.get(path, auth=RequestsAuthPluginVeracodeHMAC(), headers=json_headers)
     data = response.json()
 
     if response.status_code == 200:
@@ -186,14 +201,73 @@ def get_custom_fields(excel_headers, excel_sheet, row):
     else:
         return ""
         
+def get_archer_application_name(excel_headers, excel_sheet, row):
+    archer_app_name = get_field_value(excel_headers, excel_sheet, row, "Archer Application Name")
+    if archer_app_name:
+        return f''',
+        "archer_app_name": "{archer_app_name}"'''
+    else:
+        return ""
 
+def url_encode_with_plus(a_string):
+    return urllib.parse.quote_plus(a_string, safe='').replace("&", "%26")
+
+def get_error_node_value(body):
+    error = ET.XML(body)
+    if not error == None:
+        return error.text
+    else:
+        return ""
+    
+
+def set_xml_api_values(application_xml_id, api_base, excel_headers, excel_sheet, row, verbose):
+    path = f"{api_base}api/5.0/updateapp.do?app_id={application_xml_id}"
+    origin = get_field_value(excel_headers, excel_sheet, row, "Origin")
+    industry = get_field_value(excel_headers, excel_sheet, row, "Industry")
+    application_purpose = get_field_value(excel_headers, excel_sheet, row, "Application Purpose")
+    deployment_method = get_field_value(excel_headers, excel_sheet, row, "Deployment Method")
+    if not origin and not industry and not application_purpose and not deployment_method:
+        return "success"
+    print("Setting xml-only values")
+    has_added_parameter=False
+    if origin:
+        path = path + f'&origin={url_encode_with_plus(origin)}'
+        has_added_parameter=True
+    if industry:
+        path = path + f'{"&" if has_added_parameter else "?"}industry={url_encode_with_plus(industry)}'
+        has_added_parameter=True
+    if application_purpose:
+        path = path + f'{"&" if has_added_parameter else "?"}app_type={url_encode_with_plus(application_purpose)}'
+        has_added_parameter=True
+    if deployment_method:
+        path = path + f'{"&" if has_added_parameter else "?"}deployment_method={url_encode_with_plus(deployment_method)}'
+
+    if verbose:
+        print(path)
+    response = requests.get(path, auth=RequestsAuthPluginVeracodeHMAC(), headers=xml_headers)
+    if verbose:
+        print(f"status code {response.status_code}")
+        body = response.content
+        if body:
+            print(body)
+    if response.status_code != 200:
+        return f"ERROR: Unable to add xml-only fields to application: {response.status_code}"
+    error = get_error_node_value(body)
+    if not error:
+        print("Successfully updated xml-only fields.")
+        return "success"
+    else:
+        message = f"ERROR: Unable to add xml-only fields to application: {error}"
+        print(message)
+        return message
+    
 
 def create_application(api_base, excel_headers, excel_sheet, row, verbose):
     path = f"{api_base}appsec/v1/applications"
     request_content=f'''{{
         "profile": {{
-            "archer_app_name": "{get_field_value(excel_headers, excel_sheet, row, "Archer Application Name")}",
-            "business_criticality": "{get_field_value(excel_headers, excel_sheet, row, "Business Criticality").replace(" ", "_").upper()}"
+            "business_criticality": "{get_field_value(excel_headers, excel_sheet, row, "Business Criticality").replace(" ", "_").upper()}"            
+            {get_archer_application_name(excel_headers, excel_sheet, row)}
             {get_business_owners(excel_headers, excel_sheet, row)}
             {get_business_unit(api_base, excel_headers, excel_sheet, row, verbose)},
             "description": "{get_field_value(excel_headers, excel_sheet, row, "Description")}",
@@ -208,7 +282,7 @@ def create_application(api_base, excel_headers, excel_sheet, row, verbose):
     if verbose:
         print(request_content)
 
-    response = requests.post(path, auth=RequestsAuthPluginVeracodeHMAC(), headers=headers, json=json.loads(request_content))
+    response = requests.post(path, auth=RequestsAuthPluginVeracodeHMAC(), headers=json_headers, json=json.loads(request_content))
 
     if verbose:
         print(f"status code {response.status_code}")
@@ -217,7 +291,7 @@ def create_application(api_base, excel_headers, excel_sheet, row, verbose):
             print(body)
     if response.status_code == 200:
         print("Successfully created application profile.")
-        return "success"
+        return set_xml_api_values(response.json()["id"], api_base.replace("api", "analysiscenter"), excel_headers, excel_sheet, row, verbose)
     else:
         body = response.json()
         if (body):
@@ -230,9 +304,10 @@ def setup_excel_headers(excel_sheet, header_row, verbose):
     excel_headers = {}
     global last_column
     for column in range(1, excel_sheet.max_column+1):
-        if not excel_sheet.cell(row = header_row, column = column) or excel_sheet.cell(row = header_row, column=column) == "":
+        cell = excel_sheet.cell(row = header_row, column = column)
+        if not cell or cell is None or not cell.value or cell.value.strip() == "":
             break
-        to_add = excel_sheet.cell(row = header_row, column=column).value
+        to_add = cell.value
         if to_add:
             to_add = str(to_add).strip()
         if verbose:
@@ -264,7 +339,7 @@ def create_all_applications(api_base, file_name, header_row, verbose):
                 print("Skipping row as it was already done")
             else:
                 try:
-                    print(f"Importing row {row-header_row}/{excel_sheet.max_row-header_row}")
+                    print(f"Importing row {row-header_row}/{excel_sheet.max_row-header_row}:")
                     status = create_application(api_base, excel_headers, excel_sheet, row, verbose)
                     print(f"Finished importing row {row-header_row}/{excel_sheet.max_row-header_row}")
                     print("---------------------------------------------------------------------------")
