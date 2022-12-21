@@ -213,9 +213,9 @@ def url_encode_with_plus(a_string):
     return urllib.parse.quote_plus(a_string, safe='').replace("&", "%26")
 
 def get_error_node_value(body):
-    error = ET.XML(body)
-    if not error == None:
-        return error.text
+    inner_node = ET.XML(body)
+    if inner_node.tag == "error" and not inner_node == None:
+        return inner_node.text
     else:
         return ""
     
@@ -260,7 +260,6 @@ def set_xml_api_values(application_xml_id, api_base, excel_headers, excel_sheet,
         message = f"ERROR: Unable to add xml-only fields to application: {error}"
         print(message)
         return message
-    
 
 def create_application(api_base, excel_headers, excel_sheet, row, verbose):
     path = f"{api_base}appsec/v1/applications"
