@@ -32,7 +32,7 @@ appropriate file protections in place.
     a new column will be added to the right containing the status of each line
     
 ### Running the script
-    bulk-create-applications.py -f <excel_file_with_application_definitions> -r <header_row> [-d]"
+    py bulk-create-applications.py -f <excel_file_with_application_definitions> -r <header_row> [-d]"
         Reads all lines in <excel_file_with_application_definitions>, for each line, it will create a new application profile.
         <header_row> defines which row contains your table headers, which will be read to determine where each field goes.
 
