@@ -229,16 +229,13 @@ def set_xml_api_values(application_xml_id, api_base, excel_headers, excel_sheet,
     if not origin and not industry and not application_purpose and not deployment_method:
         return "success"
     print("Setting xml-only values")
-    has_added_parameter=False
+    
     if origin:
         path = path + f'&origin={url_encode_with_plus(origin)}'
-        has_added_parameter=True
     if industry:
         path = path + f'&industry={url_encode_with_plus(industry)}'
-        has_added_parameter=True
     if application_purpose:
         path = path + f'&app_type={url_encode_with_plus(application_purpose)}'
-        has_added_parameter=True
     if deployment_method:
         path = path + f'&deployment_method={url_encode_with_plus(deployment_method)}'
 
