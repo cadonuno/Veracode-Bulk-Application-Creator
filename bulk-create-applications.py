@@ -242,9 +242,9 @@ def set_xml_api_values(application_xml_id, api_base, excel_headers, excel_sheet,
     if verbose:
         print(path)
     response = requests.get(path, auth=RequestsAuthPluginVeracodeHMAC(), headers=xml_headers)
+    body = response.content
     if verbose:
         print(f"status code {response.status_code}")
-        body = response.content
         if body:
             print(body)
     if response.status_code != 200:
